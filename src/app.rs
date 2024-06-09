@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
-use egui::{CentralPanel, ScrollArea, TextBuffer};
+use egui::{CentralPanel, ScrollArea};
 use egui_file_dialog::FileDialog;
 
 pub struct App {
@@ -83,7 +83,7 @@ impl<'a> HexView<'a> {
 }
 
 impl App {
-    fn try_update_active_file(&mut self, raw_filepath: String) {
+    fn try_update_active_file(&mut self, raw_filepath: String) -> bool {
         let expanded_path_raw = match shellexpand::full(&raw_filepath) {
             Ok(path) => path.to_string(),
             Err(_) => String::new(),
@@ -91,18 +91,21 @@ impl App {
 
         let path = std::path::Path::new(expanded_path_raw.as_str());
 
-        if path.exists() && path.is_file() {
-            self.active_file = Some(expanded_path_raw.to_string());
-            dbg!("exists", path);
-
-            // This should have an off-thread handler
-            self.buf = match std::fs::read(path) {
-                Ok(buf) => buf,
-                Err(_) => todo!(),
-            };
-        } else {
+        if !path.exists() || !path.is_file() {
             dbg!("no exist", path);
+            return false;
         }
+
+        self.active_file = Some(expanded_path_raw.to_string());
+        dbg!("exists", path);
+
+        // This should have an off-thread handler
+        self.buf = match std::fs::read(path) {
+            Ok(buf) => buf,
+            Err(_) => return false,
+        };
+
+        true
     }
 
     fn menu_bar(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
@@ -129,7 +132,9 @@ impl App {
             let set_active_res = ui.button("Update Current File");
 
             if set_active_res.clicked() {
-                self.try_update_active_file(self.menu_text_input.clone());
+                if self.try_update_active_file(self.menu_text_input.clone()) {
+                    self.menu_text_input.clear();
+                };
             }
         });
     }
