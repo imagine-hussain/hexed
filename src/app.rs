@@ -78,38 +78,43 @@ impl<'a> HexView<'a> {
         &self.buf[start..start + NIBBLE]
     }
 }
+impl App {
+    fn menu_bar(&mut self, ui: &mut egui::Ui) {
+        egui::menu::bar(ui, |ui| {
+            let file_res = ui.button("File");
+            let response = ui.add(
+                egui::TextEdit::singleline(&mut self.menu_text_input).hint_text(
+                    self.active_file
+                        .as_ref()
+                        .map(|s| s.as_str())
+                        .unwrap_or("No Active File"),
+                ),
+            );
+            let set_active_res = ui.button("Update Current File");
+            if set_active_res.clicked() {
+                // Change the active_file
+                let expanded_path_raw = match shellexpand::full(self.menu_text_input.as_str()) {
+                    Ok(path) => path.to_string(),
+                    Err(_) => String::new(),
+                };
+
+                let path = std::path::Path::new(expanded_path_raw.as_str());
+
+                if path.exists() && path.is_file() {
+                    self.active_file = Some(expanded_path_raw.to_string());
+                    dbg!("exists", path);
+                } else {
+                    dbg!("no exist", path);
+                }
+            }
+        });
+    }
+}
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("menu_panel").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
-                let file_res = ui.button("File");
-                let response = ui.add(
-                    egui::TextEdit::singleline(&mut self.menu_text_input).hint_text(
-                        self.active_file
-                            .as_ref()
-                            .map(|s| s.as_str())
-                            .unwrap_or("No Active File"),
-                    ),
-                );
-                let set_active_res = ui.button("Update Current File");
-                if set_active_res.clicked() {
-                    // Change the active_file
-                    let expanded_path_raw = match shellexpand::full(self.menu_text_input.as_str()) {
-                        Ok(path) => path.to_string(),
-                        Err(_) => String::new(),
-                    };
-
-                    let path = std::path::Path::new(expanded_path_raw.as_str());
-
-                    if path.exists() && path.is_file() {
-                        self.active_file = Some(expanded_path_raw.to_string());
-                        dbg!("exists", path);
-                    } else {
-                        dbg!("no exist", path);
-                    }
-                }
-            })
+            self.menu_bar(ui);
         });
 
         CentralPanel::default().show(ctx, |ui| {
