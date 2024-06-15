@@ -1,4 +1,5 @@
 mod app;
+mod file_source;
 
 fn main() -> eframe::Result<()> {
     let mut native_options = eframe::NativeOptions::default();

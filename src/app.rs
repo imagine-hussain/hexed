@@ -1,23 +1,29 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
+use std::time::Duration;
+
 use egui::{CentralPanel, ScrollArea};
 use egui_file_dialog::FileDialog;
 
+use crate::file_source::{FileWatcher, FrameCounter};
+
 pub struct App {
-    buf: Vec<u8>,
     menu_text_input: String,
     active_file: Option<String>,
     file_dialog: egui_file_dialog::FileDialog,
+    file_watcher: FileWatcher,
+    framecounter: FrameCounter,
 }
 
 impl App {
     pub fn new(buf: Vec<u8>) -> Self {
         Self {
-            buf,
             menu_text_input: String::with_capacity(128),
             active_file: None,
             file_dialog: FileDialog::new(),
+            file_watcher: FileWatcher::with_buf(buf),
+            framecounter: FrameCounter::new(),
         }
     }
 }
@@ -84,33 +90,19 @@ impl<'a> HexView<'a> {
 
 impl App {
     fn try_update_active_file(&mut self, raw_filepath: String) -> bool {
-        let expanded_path_raw = match shellexpand::full(&raw_filepath) {
-            Ok(path) => path.to_string(),
-            Err(_) => String::new(),
-        };
-
-        let path = std::path::Path::new(expanded_path_raw.as_str());
-
-        if !path.exists() || !path.is_file() {
-            dbg!("no exist", path);
-            return false;
+        match self.file_watcher.try_update_active_file(raw_filepath) {
+            Some(newly_watched_path) => {
+                self.active_file = Some(newly_watched_path);
+                true
+            }
+            None => false,
         }
-
-        self.active_file = Some(expanded_path_raw.to_string());
-        dbg!("exists", path);
-
-        // This should have an off-thread handler
-        self.buf = match std::fs::read(path) {
-            Ok(buf) => buf,
-            Err(_) => return false,
-        };
-
-        true
     }
 
     fn menu_bar(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         egui::menu::bar(ui, |ui| {
             let file_res = ui.button("File Picker");
+            ui.separator();
             if file_res.clicked() {
                 self.file_dialog.select_file();
             } // Update the dialog and check if the user selected a file
@@ -132,24 +124,30 @@ impl App {
             let set_active_res = ui.button("Update Current File");
 
             if set_active_res.clicked() {
-                if self.try_update_active_file(self.menu_text_input.clone()) {
-                    self.menu_text_input.clear();
-                };
+                self.try_update_active_file(self.menu_text_input.clone());
             }
+            ui.separator();
+            ui.label("Framerate: ");
+            ui.label(self.framecounter.fps().to_string());
         });
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        self.framecounter.register_tick();
         egui::TopBottomPanel::top("menu_panel").show(ctx, |ui| {
             self.menu_bar(ctx, ui);
         });
 
         CentralPanel::default().show(ctx, |ui| {
             CentralPanel::default().show_inside(ui, |ui| {
-                HexView::new(&self.buf).show(ui);
+                let buf = self.file_watcher.buf();
+                HexView::new(buf.as_ref()).show(ui);
             });
         });
+
+        ctx.request_repaint();
+        // ctx.request_repaint_after(Duration::from_millis(100));
     }
 }
