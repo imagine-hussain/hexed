@@ -1,7 +1,15 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
-use std::{str::FromStr, sync::Arc, time::Instant, u64};
+use std::{
+    collections::HashMap,
+    io::{IoSliceMut, Read},
+    ops::Range,
+    str::FromStr,
+    sync::Arc,
+    time::Instant,
+    u64, usize,
+};
 
 use notify::{RecommendedWatcher, Watcher};
 use parking_lot::RwLock;
@@ -112,6 +120,62 @@ pub struct FrameCounter {
     last_frame: Instant,
     tick_number: u64,
     framerate: u32,
+}
+
+pub struct FileSource {
+    page_size: usize,
+    last_requested_range: Option<Range<usize>>,
+    pages: HashMap<usize, Arc<[u8]>>,
+    file: Option<std::fs::File>,
+}
+
+impl FileSource {
+    pub fn new() -> Self {
+        Self {
+            page_size: page_size::get(),
+            last_requested_range: None,
+            pages: HashMap::new(),
+            file: None,
+        }
+    }
+
+    pub fn update_byte_range(&mut self, start_byte: usize, end_byte: usize) {
+        let file_size = match self.file.as_mut() {
+            None => return,
+            Some(f) => f.metadata().unwrap().len() as usize,
+        };
+        let max_page = self.byte_to_page(file_size);
+
+        let start_page = self.byte_to_page(start_byte);
+        if max_page < start_page {
+            return; // Want to read atleast one page
+        }
+        let end_page = self.byte_to_page(end_byte).min(max_page);
+
+        let len_last_page = file_size - self.page_to_offset(end_page);
+        let mut bufs: Vec<Vec<u8>> = (start_page..end_page)
+            .map(|_| self.page_size)
+            .chain(std::iter::once(len_last_page))
+            .map(|len| vec![0u8; len])
+            .collect();
+        let mut slices: Vec<_> = bufs.iter_mut().map(|v| IoSliceMut::new(v)).collect();
+        let f = self.file.as_mut().expect("already checked existence");
+        match f.read_vectored(&mut slices) {
+            Ok(bytes_read) => drop(dbg!(bytes_read)),
+            Err(e) => drop(dbg!(e)),
+        }
+        for (offset, buf) in bufs.into_iter().enumerate() {
+            self.pages.insert(start_page + offset, Arc::from(buf));
+        }
+    }
+
+    pub fn page_to_offset(&self, page: usize) -> usize {
+        page * self.page_size
+    }
+
+    pub fn byte_to_page(&self, byte: usize) -> usize {
+        byte / self.page_size
+    }
 }
 
 impl FrameCounter {

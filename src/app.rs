@@ -1,8 +1,6 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
-use std::time::Duration;
-
 use egui::{CentralPanel, ScrollArea};
 use egui_file_dialog::FileDialog;
 
