@@ -47,7 +47,6 @@ impl FileWatcher {
         let path = std::path::Path::new(expanded_path_raw.as_str());
 
         if !path.exists() || !path.is_file() {
-            dbg!("no exist", path);
             return None;
         }
 

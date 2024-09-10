@@ -24,6 +24,21 @@ impl App {
             framecounter: FrameCounter::new(),
         }
     }
+
+    pub fn with_file(filepath: String) -> Option<Self> {
+        let mut app = Self {
+            menu_text_input: String::with_capacity(128),
+            active_file: None,
+            file_dialog: FileDialog::new(),
+            file_watcher: FileWatcher::new(),
+            framecounter: FrameCounter::new(),
+        };
+
+        match app.try_update_active_file(filepath) {
+            true => Some(app),
+            false => None,
+        }
+    }
 }
 
 struct HexView<'a> {
@@ -103,7 +118,9 @@ impl App {
             ui.separator();
             if file_res.clicked() {
                 self.file_dialog.select_file();
-            } // Update the dialog and check if the user selected a file
+            }
+
+            // Update the dialog and check if the user selected a file
             self.file_dialog.update(ctx);
             if let Some(path) = self.file_dialog.take_selected() {
                 // self.selected_file = Some(path.to_path_buf());
