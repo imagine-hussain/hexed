@@ -16,6 +16,7 @@ use notify::{RecommendedWatcher, Watcher};
 pub struct FileWatcher {
     file_handle: Arc<RwLock<Option<std::fs::File>>>,
     watcher: RecommendedWatcher,
+    page_size: usize,
     content: Arc<Mutex<HashMap<usize, Vec<u8>>>>,
 }
 
@@ -28,6 +29,7 @@ impl FileWatcher {
             file_handle,
             watcher,
             content: Arc::new(Mutex::new(HashMap::new())),
+            page_size: page_size::get(),
         }
     }
 
@@ -62,15 +64,12 @@ impl FileWatcher {
         }
     }
 
-    const PAGE_SIZE: usize = 1024 * 4;
-    fn index_to_page_number(index: usize) -> usize {
-        // assume a page is 4K for now
-        // TODO: determine page length at comptime
-        index / Self::PAGE_SIZE
+    fn index_to_page_number(&self, index: usize) -> usize {
+        index / self.page_size
     }
 
-    fn offset_in_page(index: usize) -> usize {
-        index % Self::PAGE_SIZE
+    fn offset_in_page(&self, index: usize) -> usize {
+        index % self.page_size
     }
 
     pub fn get_range_within_page(
@@ -80,9 +79,9 @@ impl FileWatcher {
     ) -> Option<usize> {
         let Range { start, end } = range;
 
-        let page_number = Self::index_to_page_number(start);
+        let page_number = self.index_to_page_number(start);
         // Ensure same page, otherwise we can't return a slice
-        if page_number != Self::index_to_page_number(end) {
+        if page_number != self.index_to_page_number(end) {
             return None;
         }
 
@@ -101,17 +100,17 @@ impl FileWatcher {
         let num_pages = lock.len();
         let page = lock.entry(page_number).or_insert_with(|| {
             let _ = file_handle
-                .seek(SeekFrom::Start((page_number * Self::PAGE_SIZE) as u64))
+                .seek(SeekFrom::Start((page_number * self.page_size) as u64))
                 .expect("Seek failed????");
-            let mut buffer = vec![0; Self::PAGE_SIZE];
+            let mut buffer = vec![0; self.page_size];
             let _ = file_handle.read(&mut buffer).expect("IO error");
             dbg!(num_pages + 1);
 
             buffer
         });
 
-        let start_offset = Self::offset_in_page(start);
-        let end_offset = Self::offset_in_page(end);
+        let start_offset = self.offset_in_page(start);
+        let end_offset = self.offset_in_page(end);
 
         let output_len = page.len().min(end_offset - start_offset);
         if output_buf.len() < output_len {
