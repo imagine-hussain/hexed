@@ -1,10 +1,7 @@
 mod app;
 mod file_source;
 
-use std::process::exit;
-
 use anyhow::{anyhow, Context};
-use app::App;
 use clap::Parser;
 use eframe::{AppCreator, CreationContext};
 
@@ -26,11 +23,6 @@ fn main() -> anyhow::Result<()> {
             .with_inner_size((1505.0, 1200.0));
     }
 
-    let buf = match in_debug {
-        true => Vec::from_iter((0..1000usize).map(|x| (x % 127) as u8).into_iter()),
-        false => Vec::new(),
-    };
-
     let args = Args::parse();
 
     let make_app: AppCreator = Box::new(move |_cc: &CreationContext| {
@@ -39,7 +31,7 @@ fn main() -> anyhow::Result<()> {
                 .ok_or_else(|| anyhow!("Was unable to read file {filepath} set from command line"))
                 .with_context(|| "Cannot create app")
                 .unwrap(),
-            None => app::App::new(buf),
+            None => app::App::new(),
         };
         Box::new(app)
     });

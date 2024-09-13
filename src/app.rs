@@ -15,12 +15,12 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(buf: Vec<u8>) -> Self {
+    pub fn new() -> Self {
         Self {
             menu_text_input: String::with_capacity(128),
             active_file: None,
             file_dialog: FileDialog::new(),
-            file_watcher: FileWatcher::with_buf(buf),
+            file_watcher: FileWatcher::new(),
             framecounter: FrameCounter::new(),
         }
     }
@@ -42,17 +42,19 @@ impl App {
 }
 
 struct HexView<'a> {
-    buf: &'a [u8],
+    // filewatcher
+    // buf: &'a [u8],
+    file: &'a mut FileWatcher,
 }
 
 const NIBBLE: usize = 16;
 
 impl<'a> HexView<'a> {
-    pub fn new(buf: &'a [u8]) -> Self {
-        Self { buf }
+    pub fn new(file: &'a mut FileWatcher) -> Self {
+        Self { file }
     }
 
-    pub fn show(&self, ui: &mut egui::Ui) {
+    pub fn show(&mut self, ui: &mut egui::Ui) {
         let hex_box = |val: u8, ui: &mut egui::Ui| {
             ui.monospace(format!("{val:02x} "));
         };
@@ -81,23 +83,28 @@ impl<'a> HexView<'a> {
             ui.monospace("Ascii");
         });
         ui.separator();
-        let total_rows = self.buf.len() / NIBBLE;
+        let total_rows = self.file.file_len() / NIBBLE;
+
+        let mut row_buf = [0; NIBBLE];
+
         ScrollArea::vertical().show_rows(ui, 15.0, total_rows, |ui, row_range| {
             for row in row_range {
                 ui.horizontal(|ui| {
+                    self.nth_row(row, &mut row_buf);
+
                     address_col(row, ui);
-                    self.nth_row(row).iter().for_each(|&n| hex_box(n, ui));
+                    row_buf.iter().for_each(|&n| hex_box(n, ui));
                     hex_to_ascii_separator(ui);
-                    self.nth_row(row).iter().for_each(|&n| ascii_box(n, ui));
+                    row_buf.iter().for_each(|&n| ascii_box(n, ui));
                     ui.monospace(" ");
                 });
             }
         });
     }
 
-    pub fn nth_row(&self, row: usize) -> &[u8] {
+    pub fn nth_row(&mut self, row: usize, buf: &mut [u8; NIBBLE]) {
         let start = row * NIBBLE;
-        &self.buf[start..start + NIBBLE]
+        self.file.get_range_within_page(start..start + NIBBLE, buf);
     }
 }
 
@@ -157,8 +164,7 @@ impl eframe::App for App {
 
         CentralPanel::default().show(ctx, |ui| {
             CentralPanel::default().show_inside(ui, |ui| {
-                let buf = self.file_watcher.buf();
-                HexView::new(buf.as_ref()).show(ui);
+                HexView::new(&mut self.file_watcher).show(ui);
             });
         });
 
