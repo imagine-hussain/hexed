@@ -18,7 +18,7 @@ def main():
         print("The entered content was bigger than the given length. You probably don't want to use this tool")
         return
 
-    with open(file=args.filename, mode="wb") as f:
+    with open(file=args.filename, mode="w+b") as f:
         content = args.content.encode()
         f.write(content)
         if args.zero_pad:
