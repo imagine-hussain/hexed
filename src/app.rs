@@ -42,8 +42,6 @@ impl App {
 }
 
 struct HexView<'a> {
-    // filewatcher
-    // buf: &'a [u8],
     file: &'a mut FileWatcher,
 }
 
