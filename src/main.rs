@@ -1,7 +1,18 @@
 mod app;
 mod file_source;
 
-fn main() -> eframe::Result<()> {
+use anyhow::{anyhow, Context};
+use clap::Parser;
+use eframe::{AppCreator, CreationContext};
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    filename: Option<String>,
+}
+
+fn main() -> anyhow::Result<()> {
     let mut native_options = eframe::NativeOptions::default();
     let debug_pos = std::env::args().nth(1).unwrap_or_default();
     let in_debug = debug_pos == "dbg";
@@ -12,16 +23,20 @@ fn main() -> eframe::Result<()> {
             .with_inner_size((1505.0, 1200.0));
     }
 
-    let buf = match in_debug {
-        true => Vec::from_iter((0..1000usize).map(|x| (x % 127) as u8).into_iter()),
-        false => Vec::new(),
-    };
+    let args = Args::parse();
 
-    let _ = eframe::run_native(
-        "Hexed.rs",
-        native_options,
-        Box::new(|_cc| Box::new(app::App::new(buf))),
-    );
+    let make_app: AppCreator = Box::new(move |_cc: &CreationContext| {
+        let app = match args.filename {
+            Some(filepath) => app::App::with_file(filepath.clone())
+                .ok_or_else(|| anyhow!("Was unable to read file {filepath} set from command line"))
+                .with_context(|| "Cannot create app")
+                .unwrap(),
+            None => app::App::new(),
+        };
+        Box::new(app)
+    });
+
+    let _ = eframe::run_native("Hexed.rs", native_options, make_app);
 
     Ok(())
 }

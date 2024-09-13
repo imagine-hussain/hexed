@@ -1,32 +1,33 @@
-#![allow(unused_variables)]
-#![allow(dead_code)]
+// #![allow(unused_variables)]
+// #![allow(dead_code)]
 
-use std::{str::FromStr, sync::Arc, time::Instant, u64};
+use std::{
+    collections::HashMap,
+    io::{Read, Seek, SeekFrom},
+    ops::Range,
+    sync::Arc,
+    time::Instant,
+};
+
+use parking_lot::{Mutex, RwLock};
 
 use notify::{RecommendedWatcher, Watcher};
-use parking_lot::RwLock;
 
 pub struct FileWatcher {
-    filename: Arc<RwLock<Option<String>>>,
+    file_handle: Arc<RwLock<Option<std::fs::File>>>,
     watcher: RecommendedWatcher,
-    contents: Arc<RwLock<Vec<u8>>>,
+    content: Arc<Mutex<HashMap<usize, Vec<u8>>>>,
 }
 
 impl FileWatcher {
-    fn trigger_update(&mut self) {}
-
     pub fn new() -> Self {
-        Self::with_buf(Vec::new())
-    }
-
-    pub fn with_buf(buf: Vec<u8>) -> Self {
-        let filename = Arc::new(RwLock::new(None));
-        let contents = Arc::new(RwLock::new(buf));
-        let watcher = create_watcher(filename.clone(), contents.clone());
+        let file_handle = Arc::new(RwLock::new(None));
+        let contents = Arc::new(Mutex::new(HashMap::new()));
+        let watcher = create_watcher(contents.clone());
         Self {
-            filename,
-            contents,
+            file_handle,
             watcher,
+            content: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -37,43 +38,95 @@ impl FileWatcher {
         };
 
         let path = std::path::Path::new(expanded_path_raw.as_str());
-
-        if !path.exists() || !path.is_file() {
-            dbg!("no exist", path);
-            return None;
-        }
+        let file = std::fs::File::open(path).ok()?;
+        *self.file_handle.write() = Some(file);
 
         let dir = path.parent().unwrap();
         dbg!(&dir);
 
-        *self.filename.write() = Some(expanded_path_raw.clone());
         let watch = self.watcher.watch(dir, notify::RecursiveMode::NonRecursive);
         dbg!(watch).ok();
 
-        self.update_contents();
+        // On file change old content is no longer relevant
+        self.content.lock().clear();
 
         dbg!("exists", &expanded_path_raw);
         Some(expanded_path_raw)
     }
 
-    pub fn update_contents(&mut self) {
-        let path_string = self.filename.read().to_owned().unwrap();
-        let path = std::path::Path::new(&path_string);
-        let read_contents = std::fs::read(path).unwrap();
-        *self.contents.write() = read_contents;
+    pub fn file_len(&self) -> usize {
+        let file_guard = self.file_handle.write();
+        match file_guard.as_ref() {
+            Some(f) => f.metadata().map(|meta| meta.len()).unwrap_or(0) as usize,
+            None => return 0,
+        }
     }
 
-    pub fn buf(
+    const PAGE_SIZE: usize = 1024 * 4;
+    fn index_to_page_number(index: usize) -> usize {
+        // assume a page is 4K for now
+        // TODO: determine page length at comptime
+        index / Self::PAGE_SIZE
+    }
+
+    fn offset_in_page(index: usize) -> usize {
+        index % Self::PAGE_SIZE
+    }
+
+    pub fn get_range_within_page(
         &mut self,
-    ) -> parking_lot::lock_api::RwLockReadGuard<'_, parking_lot::RawRwLock, Vec<u8>> {
-        self.contents.read()
+        range: Range<usize>,
+        output_buf: &mut [u8],
+    ) -> Option<usize> {
+        let Range { start, end } = range;
+
+        let page_number = Self::index_to_page_number(start);
+        // Ensure same page, otherwise we can't return a slice
+        if page_number != Self::index_to_page_number(end) {
+            return None;
+        }
+
+        let file_len = self.file_len();
+        if start >= file_len || start > end {
+            return None;
+        }
+
+        let mut file_guard: parking_lot::lock_api::RwLockWriteGuard<
+            parking_lot::RawRwLock,
+            Option<std::fs::File>,
+        > = self.file_handle.as_ref().write();
+        let file_handle = file_guard.as_mut()?;
+
+        let mut lock = self.content.lock_arc();
+        let num_pages = lock.len();
+        let page = lock.entry(page_number).or_insert_with(|| {
+            let _ = file_handle
+                .seek(SeekFrom::Start((page_number * Self::PAGE_SIZE) as u64))
+                .expect("Seek failed????");
+            let mut buffer = vec![0; Self::PAGE_SIZE];
+            let _ = file_handle.read(&mut buffer).expect("IO error");
+            dbg!(num_pages + 1);
+
+            buffer
+        });
+
+        let start_offset = Self::offset_in_page(start);
+        let end_offset = Self::offset_in_page(end);
+
+        let output_len = page.len().min(end_offset - start_offset);
+        if output_buf.len() < output_len {
+            return None;
+        }
+
+        for i in 0..output_len {
+            output_buf[i] = page[start_offset + i];
+        }
+
+        Some(output_len)
     }
 }
 
-fn create_watcher(
-    path: Arc<RwLock<Option<String>>>,
-    contents: Arc<RwLock<Vec<u8>>>,
-) -> RecommendedWatcher {
+fn create_watcher(content: Arc<Mutex<HashMap<usize, Vec<u8>>>>) -> RecommendedWatcher {
     let watcher = notify::recommended_watcher(move |event_res| {
         dbg!("event", &event_res);
         let event: notify::Event = match event_res {
@@ -89,17 +142,13 @@ fn create_watcher(
             notify::EventKind::Other => true,
         };
         dbg!(do_update);
+
         let updated_paths = event.paths;
+
         if do_update {
-            let path_string = path.read().to_owned().unwrap();
-            let path = std::path::PathBuf::from_str(&path_string).unwrap();
-            dbg!(&path);
-            let read_contents = std::fs::read(path).unwrap_or_default();
-            let len_read = read_contents.len();
-            dbg!(len_read);
-            *contents.write() = read_contents;
-            dbg!("wrote = ", len_read);
+            content.lock_arc().clear();
         }
+
         assert!(updated_paths.len() > 0);
     })
     .unwrap();
