@@ -27,7 +27,7 @@ impl FileWatcher {
         Self {
             file_handle,
             watcher,
-            content: Arc::new(Mutex::new(HashMap::new())),
+            content: contents,
             page_size: page_size::get(),
         }
     }
@@ -99,16 +99,17 @@ impl FileWatcher {
                 .seek(SeekFrom::Start((page_number * self.page_size) as u64))
                 .expect("Seek failed????");
             let mut buffer = vec![0; self.page_size];
-            let _ = file_handle.read(&mut buffer).expect("IO error");
-            dbg!(num_pages + 1);
+            let bytes_read = file_handle.read(&mut buffer).expect("IO error");
+            buffer.resize_with(bytes_read, || unreachable!("Only sizes down, never up"));
 
             buffer
         });
 
+        let page_len = page.len();
         let start_offset = self.offset_in_page(start);
-        let end_offset = self.offset_in_page(end);
+        let end_offset = self.offset_in_page(end).min(page_len);
 
-        let output_len = page.len().min(end_offset - start_offset);
+        let output_len = page_len.min(end_offset - start_offset);
         if output_buf.len() < output_len {
             return None;
         }
@@ -123,7 +124,6 @@ impl FileWatcher {
 
 fn create_watcher(content: Arc<Mutex<HashMap<usize, Vec<u8>>>>) -> RecommendedWatcher {
     let watcher = notify::recommended_watcher(move |event_res| {
-        dbg!("event", &event_res);
         let event: notify::Event = match event_res {
             Ok(e) => e,
             Err(_) => todo!(),
@@ -136,12 +136,13 @@ fn create_watcher(content: Arc<Mutex<HashMap<usize, Vec<u8>>>>) -> RecommendedWa
             notify::EventKind::Remove(_) => true,
             notify::EventKind::Other => true,
         };
-        dbg!(do_update);
 
         let updated_paths = event.paths;
 
         if do_update {
-            content.lock_arc().clear();
+            let mut content_guard = content.lock();
+            content_guard.clear();
+            content_guard.len();
         }
 
         assert!(updated_paths.len() > 0);

@@ -56,10 +56,6 @@ impl<'a> HexView<'a> {
     const ROW_HEIGHT: f32 = 15.0;
 
     pub fn show(&mut self, ui: &mut egui::Ui) {
-        let hex_box = |val: u8, ui: &mut egui::Ui| {
-            ui.monospace(format!("{val:02x} "));
-        };
-
         let address_col = |row: usize, ui: &mut egui::Ui| {
             let address = row * NIBBLE;
             ui.monospace(format!("{address:#08x} | "));
@@ -67,12 +63,21 @@ impl<'a> HexView<'a> {
         let hex_to_ascii_separator = |ui: &mut egui::Ui| {
             ui.monospace(" | ");
         };
+
+        let hex_box = |val: u8, ui: &mut egui::Ui| {
+            ui.monospace(format!("{val:02x} "));
+        };
         let ascii_box = |n: u8, ui: &mut egui::Ui| {
             let repr = match n {
                 (32..=126) => n as char,
                 _ => '.',
             };
             ui.monospace(String::from(repr));
+        };
+        let padding_boxes = |cols: usize, ui: &mut egui::Ui| {
+            for _ in 0..cols {
+                ui.monospace(String::from("   "));
+            }
         };
 
         ui.horizontal(|ui| {
@@ -84,22 +89,31 @@ impl<'a> HexView<'a> {
             ui.monospace("Ascii");
         });
         ui.separator();
-        let total_rows = self.file.file_len() / NIBBLE;
+        let file_len = self.file.file_len();
+        let total_rows = match file_len % NIBBLE {
+            0 => file_len / NIBBLE,
+            _ => file_len / NIBBLE + 1,
+        };
 
         let mut row_buf = [0; NIBBLE];
-
-        let _ = {};
 
         let rendered_rows =
             ScrollArea::vertical().show_rows(ui, Self::ROW_HEIGHT, total_rows, |ui, row_range| {
                 for row in row_range.clone() {
                     ui.horizontal(|ui| {
-                        self.nth_row(row, &mut row_buf);
+                        let cols = self.nth_row(row, &mut row_buf).unwrap_or(0);
+                        let padding_cols = NIBBLE - cols;
 
+                        // Hex View
                         address_col(row, ui);
-                        row_buf.iter().for_each(|&n| hex_box(n, ui));
+                        row_buf[0..cols].iter().for_each(|&n| hex_box(n, ui));
+                        padding_boxes(padding_cols, ui);
+
                         hex_to_ascii_separator(ui);
-                        row_buf.iter().for_each(|&n| ascii_box(n, ui));
+
+                        // Ascii View
+                        row_buf[0..cols].iter().for_each(|&n| ascii_box(n, ui));
+                        padding_boxes(padding_cols, ui);
                         ui.monospace(" ");
                     });
                 }
@@ -107,9 +121,9 @@ impl<'a> HexView<'a> {
             });
     }
 
-    pub fn nth_row(&mut self, row: usize, buf: &mut [u8; NIBBLE]) {
+    pub fn nth_row(&mut self, row: usize, buf: &mut [u8; NIBBLE]) -> Option<usize> {
         let start = row * NIBBLE;
-        self.file.get_range_within_page(start..start + NIBBLE, buf);
+        self.file.get_range_within_page(start..start + NIBBLE, buf)
     }
 }
 

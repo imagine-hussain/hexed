@@ -14,16 +14,7 @@ struct Args {
 }
 
 fn main() -> anyhow::Result<()> {
-    let mut native_options = eframe::NativeOptions::default();
-    let debug_pos = std::env::args().nth(1).unwrap_or_default();
-    let in_debug = debug_pos == "dbg";
-
-    if in_debug {
-        native_options.viewport = egui::viewport::ViewportBuilder::default()
-            .with_position((0.0, 0.0))
-            .with_inner_size((1505.0, 1200.0));
-    }
-
+    let native_options = eframe::NativeOptions::default();
     let args = Args::parse();
 
     let make_app: AppCreator = Box::new(move |_cc: &CreationContext| {
