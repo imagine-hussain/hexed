@@ -4,7 +4,8 @@
 use egui::{CentralPanel, ScrollArea};
 use egui_file_dialog::FileDialog;
 
-use crate::file_source::{FileWatcher, FrameCounter};
+use crate::file_source::FileWatcher;
+use crate::widgets::FrameCounter;
 
 pub struct App {
     menu_text_input: String,
@@ -52,6 +53,8 @@ impl<'a> HexView<'a> {
         Self { file }
     }
 
+    const ROW_HEIGHT: f32 = 15.0;
+
     pub fn show(&mut self, ui: &mut egui::Ui) {
         let hex_box = |val: u8, ui: &mut egui::Ui| {
             ui.monospace(format!("{val:02x} "));
@@ -85,19 +88,23 @@ impl<'a> HexView<'a> {
 
         let mut row_buf = [0; NIBBLE];
 
-        ScrollArea::vertical().show_rows(ui, 15.0, total_rows, |ui, row_range| {
-            for row in row_range {
-                ui.horizontal(|ui| {
-                    self.nth_row(row, &mut row_buf);
+        let _ = {};
 
-                    address_col(row, ui);
-                    row_buf.iter().for_each(|&n| hex_box(n, ui));
-                    hex_to_ascii_separator(ui);
-                    row_buf.iter().for_each(|&n| ascii_box(n, ui));
-                    ui.monospace(" ");
-                });
-            }
-        });
+        let rendered_rows =
+            ScrollArea::vertical().show_rows(ui, Self::ROW_HEIGHT, total_rows, |ui, row_range| {
+                for row in row_range.clone() {
+                    ui.horizontal(|ui| {
+                        self.nth_row(row, &mut row_buf);
+
+                        address_col(row, ui);
+                        row_buf.iter().for_each(|&n| hex_box(n, ui));
+                        hex_to_ascii_separator(ui);
+                        row_buf.iter().for_each(|&n| ascii_box(n, ui));
+                        ui.monospace(" ");
+                    });
+                }
+                row_range
+            });
     }
 
     pub fn nth_row(&mut self, row: usize, buf: &mut [u8; NIBBLE]) {

@@ -1,5 +1,6 @@
 mod app;
 mod file_source;
+mod widgets;
 
 use anyhow::{anyhow, Context};
 use clap::Parser;
