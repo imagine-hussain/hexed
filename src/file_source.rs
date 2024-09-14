@@ -93,7 +93,6 @@ impl FileWatcher {
         let file_handle = file_guard.as_mut()?;
 
         let mut lock = self.content.lock_arc();
-        let num_pages = lock.len();
         let page = lock.entry(page_number).or_insert_with(|| {
             let _ = file_handle
                 .seek(SeekFrom::Start((page_number * self.page_size) as u64))
