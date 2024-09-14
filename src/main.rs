@@ -34,7 +34,7 @@ fn main() -> anyhow::Result<()> {
                 .unwrap(),
             None => app::App::new(),
         };
-        Box::new(app)
+        Ok(Box::new(app))
     });
 
     let _ = eframe::run_native("Hexed.rs", native_options, make_app);

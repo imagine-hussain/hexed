@@ -8,9 +8,9 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.86"
 clap = { version = "4.5.17", features = ["derive"] }
-eframe = "0.27.2"
-egui = "0.27.2"
-egui-file-dialog = "0.5.0"
+eframe = "0.28.1"
+egui = "0.28.1"
+egui-file-dialog = "0.6.1"
 notify = "6.1.1"
 page_size = "0.6.0"
 parking_lot = { version = "0.12.3", features = ["arc_lock"] }
