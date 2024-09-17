@@ -62,8 +62,16 @@ at runtime.
 
 ### Examples:
 
+Base Hex View:
+![image](https://github.com/user-attachments/assets/90d60219-7c04-4814-99e8-cd46844b9265)
+
+File Picker
+![image](https://github.com/user-attachments/assets/0e99b297-1b1a-4d85-8fd9-7660c8171e7b)
+
+
 
 ### To Do
 - Read variable length data types
 - Custom DSL for parsing your own data types
+- Add a demo of the hot-reloading
 
