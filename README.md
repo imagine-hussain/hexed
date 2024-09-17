@@ -54,7 +54,7 @@ You can run the program without installing, using `cargo run`
 To run Hexed.rs, simply use the following command:
 
 ```bash
-cargo run --release -- --filename <path-to-file>
+hexed --filename <path-to-file>
 ```
 
 Note that you can omit the `filename` and use the file-picker to select the file
