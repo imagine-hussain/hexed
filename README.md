@@ -28,10 +28,26 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    cd hexed-rs
    ```
 
-2. Build the project:
+2. You have a few choices for running / installation.
+
+**Recommended:**
+You can install using `cargo`:
+   ```bash
+   cargo install --path .
+   ```
+
+You can also build manually, and then run the binary directly, or add it to your path
    ```bash
    cargo build --release
+   ./target/release/hexed
    ```
+
+You can run the program without installing, using `cargo run`
+
+   ```bash
+   cargo run --release
+   ```
+
 
 ## Running the Application
 
